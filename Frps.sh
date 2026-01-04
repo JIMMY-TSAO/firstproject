@@ -42,7 +42,7 @@ while :; do echo
 done
 
 while :; do echo
-    read -t 20 -p "Please input privilege token: " privilege_token
+    read -t 20 -p "Please input token: " privilege_token
 	privilege_token=${privilege_token:-IEWB.NET_$RANDOM}
     [ -n "$privilege_token" ] && break
 done
@@ -58,8 +58,7 @@ dashboard_port = 7500
 # dashboard 用户名密码可选，默认都为 admin
 dashboard_user = $dashboard_user
 dashboard_pwd = $dashboard_pwd
-privilege_mode = true
-privilege_token= $privilege_token
+token= $privilege_token
 EOF
 
 setenforce 0
@@ -89,5 +88,5 @@ echo "@reboot sleep 10; /home/frp.sh" >>/var/spool/cron/root
 /bin/bash /home/frp.sh
 clear
 echo -e "Dashboard_user: \033[32m${dashboard_user}\033[0m" "Dashboard Password: \033[32m${dashboard_pwd}\033[0m"
-echo -e "privilege_token: \033[32m${privilege_token}\033[0m"
+echo -e "token: \033[32m${privilege_token}\033[0m"
 #reboot
