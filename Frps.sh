@@ -22,12 +22,12 @@ wait_for_key() {
 wait_for_key
 pwd=`pwd`
 yum install tar -y 
-wget https://github.com/fatedier/frp/releases/download/v0.65.0/frp_0.65.0_linux_amd64.tar.gz
-tar -zxvf frp_0.65.0_linux_amd64.tar.gz 
+wget https://github.com/fatedier/frp/releases/download/v0.66.0/frp_0.66.0_linux_amd64.tar.gz
+tar -zxvf frp_0.66.0_linux_amd64.tar.gz
 #下载是否完成
-if [ ! -e "$pwd/frp_0.65.0_linux_amd64/frps" ]; then echo "Download frp From Github failed"; exit 1; fi
-mv frp_0.65.0_linux_amd64 Frp_server
-rm -rf frp_0.65.0_linux_amd64.tar.gz
+if [ ! -e "$pwd/frp_0.66.0_linux_amd64/frps" ]; then echo "Download frp From Github failed"; exit 1; fi
+mv frp_0.66.0_linux_amd64 Frp_server
+rm -rf frp_0.66.0_linux_amd64.tar.gz
 
 while :; do echo
     read -t 20 -p "Please input dashboard username: " dashboard_user
