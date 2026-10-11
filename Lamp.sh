@@ -283,26 +283,13 @@ install_base_tools() {
     command -v logrotate >/dev/null 2>&1 || die "logrotate is required but not installed."
 }
 
-# Remi 源修复：mirrorlist 跳转服务（cdn.remirepo.net）在国内常被拦（403），
-# 而包本体服务器 rpms.remirepo.net 可达。改为 baseurl 直连，并停用用不到的 remi-modular。
+# Remi 源修复：只补缺失的 dnf 变量，不动 repo 文件本身。
+# Remi 的 repo 地址依赖自定义变量 $releasever_major；RHEL/CentOS/Rocky 的 release 包自带
+# /etc/dnf/vars/releasever_major，而衍生版（如 OpenCloudOS）没有，导致 URL 里的变量
+# 无法展开、请求打到畸形路径而 403。补上该文件后各发行版行为一致。
 fix_remi_repo() {
-    local f
-    for f in /etc/yum.repos.d/remi*.repo; do
-        [ -f "$f" ] || continue
-        sed -i \
-            -e 's|^mirrorlist=|#mirrorlist=|' \
-            -e 's|^#\s*baseurl=https://rpms.remirepo.net|baseurl=https://rpms.remirepo.net|' \
-            "$f"
-        # remi-modular 提供 DNF module 流，本脚本用的 phpXX-php-* SCL 包在 remi-safe，不需要
-        case "$f" in
-            *remi-modular*) sed -i 's|^enabled=1|enabled=0|' "$f" ;;
-        esac
-    done
-    # 元数据刷新失败不应致命：个别源不可达时让 dnf 跳过
-    for f in /etc/yum.repos.d/remi*.repo; do
-        [ -f "$f" ] || continue
-        grep -q '^skip_if_unavailable' "$f" || echo 'skip_if_unavailable=1' >> "$f"
-    done
+    mkdir -p /etc/dnf/vars
+    echo "$os_major" > /etc/dnf/vars/releasever_major
 }
 
 install_php_repo() {
