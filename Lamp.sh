@@ -283,6 +283,28 @@ install_base_tools() {
     command -v logrotate >/dev/null 2>&1 || die "logrotate is required but not installed."
 }
 
+# Remi 源修复：mirrorlist 跳转服务（cdn.remirepo.net）在国内常被拦（403），
+# 而包本体服务器 rpms.remirepo.net 可达。改为 baseurl 直连，并停用用不到的 remi-modular。
+fix_remi_repo() {
+    local f
+    for f in /etc/yum.repos.d/remi*.repo; do
+        [ -f "$f" ] || continue
+        sed -i \
+            -e 's|^mirrorlist=|#mirrorlist=|' \
+            -e 's|^#\s*baseurl=https://rpms.remirepo.net|baseurl=https://rpms.remirepo.net|' \
+            "$f"
+        # remi-modular 提供 DNF module 流，本脚本用的 phpXX-php-* SCL 包在 remi-safe，不需要
+        case "$f" in
+            *remi-modular*) sed -i 's|^enabled=1|enabled=0|' "$f" ;;
+        esac
+    done
+    # 元数据刷新失败不应致命：个别源不可达时让 dnf 跳过
+    for f in /etc/yum.repos.d/remi*.repo; do
+        [ -f "$f" ] || continue
+        grep -q '^skip_if_unavailable' "$f" || echo 'skip_if_unavailable=1' >> "$f"
+    done
+}
+
 install_php_repo() {
     info "Configuring PHP repository..."
     if [ "$OS_FAMILY" = "rhel" ]; then
@@ -301,6 +323,7 @@ install_php_repo() {
                 rm -f "$tmp_rpm"
             fi
         fi
+        fix_remi_repo
     else
         # Ondřej Surý PHP 仓库
         local keyring_deb="/tmp/debsuryorg-archive-keyring.deb"
