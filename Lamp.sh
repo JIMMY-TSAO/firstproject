@@ -592,12 +592,17 @@ Try another MariaDB version, or check https://deb.mariadb.org/${ver}/${os_id}/di
         fi
 
         mkdir -p /etc/apt/keyrings
-        download "https://mariadb.org/mariadb_release_signing_key.pgp" \
-                 /etc/apt/keyrings/mariadb-keyring.pgp 30 \
+        # MariaDB 官方密钥是 ASCII 装甲格式，apt 不认（"unsupported filetype"），
+        # 必须用 gpg --dearmor 转成二进制 keyring 后才能用于 signed-by 校验。
+        local key_raw="/tmp/mariadb-key-raw.pgp"
+        download "https://mariadb.org/mariadb_release_signing_key.pgp" "$key_raw" 30 \
             || die "Failed to download MariaDB signing key."
-        chmod 644 /etc/apt/keyrings/mariadb-keyring.pgp
+        gpg --batch --yes --dearmor < "$key_raw" > /etc/apt/keyrings/mariadb-keyring.gpg 2>/dev/null \
+            || die "Failed to convert MariaDB signing key (gpg --dearmor)."
+        rm -f "$key_raw"
+        chmod 644 /etc/apt/keyrings/mariadb-keyring.gpg
         cat > /etc/apt/sources.list.d/mariadb.list << EOF
-deb [signed-by=/etc/apt/keyrings/mariadb-keyring.pgp] https://deb.mariadb.org/${ver}/${os_id} ${suite} main
+deb [signed-by=/etc/apt/keyrings/mariadb-keyring.gpg] https://deb.mariadb.org/${ver}/${os_id} ${suite} main
 EOF
         run apt-get update -y
     fi
