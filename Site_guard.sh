@@ -5,7 +5,7 @@ export PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 clear
 # ================= 配置区域 =================
 TARGET_PATHS=(
-    "/Data/Public_Root/iewb.net/public_html" 
+    "/Public_Root/test.com/public_html" 
     "/etc/passwd" 
     "/etc/shadow" 
     "/etc/group" 
@@ -15,8 +15,8 @@ TARGET_PATHS=(
 )
 
 EXCLUDE_LIST=(
-    "/Data/Public_Root/iewb.net/public_html/writable" 
-    "/Data/Public_Root/iewb.net/public_html/public/uploads"
+    "/Public_Root/test.com/public_html/writable" 
+    "/Public_Root/test.com/public_html/uploads"
 )
 
 DB_DIR="/var/log/integrity_db"
