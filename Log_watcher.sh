@@ -8,7 +8,7 @@ clear
 # 获取当前脚本所在的目录
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # 1. 动态匹配当日日志文件路径（以你的项目日志命名规则为准）
-LOG_FILE="/Data/Public_Root/iewb.net/public_html/writable/logs/log-$(date +%Y-%m-%d).log"
+LOG_FILE="/Public_Root/test.com/public_html/logs/log-$(date +%Y-%m-%d).log"
 
 # 2. 记录上次读取位置的偏移量文件
 OFFSET_FILE="$DIR/last_position.txt"
