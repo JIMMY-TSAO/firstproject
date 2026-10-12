@@ -2,13 +2,14 @@
 # =================================================================######
 #  LAMP (Apache + MariaDB + PHP) Installer & Virtual Host Manager
 #
-#  Supported OS:
-#    RHEL family  : RHEL / Rocky / AlmaLinux / CentOS Stream / Oracle Linux /
-#                   CloudLinux / Virtuozzo / EuroLinux / Circle ... 8+
-#                   (any distro with ID_LIKE=rhel|centos)
-#    Debian family: Debian 11+, Ubuntu 20.04+ (and derivatives via ID_LIKE)
+#  Supported OS (tested):
+#    RHEL / Rocky Linux / AlmaLinux / CentOS Stream 8+
+#    Debian 11+ / Ubuntu 20.04+
 #
-#  Note: Fedora is NOT supported (different repo layout).
+#  Other distributions are NOT supported. Derivatives often lack packages or
+#  provide-names this script depends on (epel-release, redhat-release,
+#  mysql-selinux, $releasever_major, OpenSSL version ...), and cannot be
+#  validated without testing each one.
 #
 #  More information: http://www.iewb.net
 # ======================================================================
@@ -178,11 +179,24 @@ pkg_install_soft() {
 # 逐包安装并容忍个别失败（用于扩展型组件），返回失败列表
 pkg_install_each() {
     local failed=() p
+    # 先整批装：一次事务完成，远快于逐个安装
+    info "Installing optional packages..."
+    if pkg_install "$@" >/dev/null 2>&1; then
+        info "Optional packages installed."
+        return 0
+    fi
+    # 整批失败（个别包在源中不存在）→ 退回逐个装，缺的跳过，并显示进度
     for p in "$@"; do
-        pkg_install "$p" >/dev/null 2>&1 || failed+=("$p")
+        printf "  - %-32s" "$p"
+        if pkg_install "$p" >/dev/null 2>&1; then
+            echo "ok"
+        else
+            echo "not available"
+            failed+=("$p")
+        fi
     done
     if [ "${#failed[@]}" -gt 0 ]; then
-        warn "Packages not available, skipped: ${failed[*]}"
+        warn "Packages not available (missing from repos or network error): ${failed[*]}"
         return 1
     fi
     return 0
@@ -261,8 +275,21 @@ url_exists() {
 # -----------------------------------------------------------------------
 # 软件源安装
 # -----------------------------------------------------------------------
+# 清理历史残留的第三方源配置（上次安装失败可能留下坏源，导致 apt update 直接失败）
+clean_stale_repo_files() {
+    if [ "$OS_FAMILY" = "rhel" ]; then
+        rm -f /etc/yum.repos.d/MariaDB.repo /etc/yum.repos.d/mariadb.repo
+    else
+        rm -f /etc/apt/sources.list.d/mariadb*.list \
+              /etc/apt/sources.list.d/mariadb*.sources \
+              /etc/apt/sources.list.d/MariaDB*.list 2>/dev/null || true
+    fi
+}
+
 install_base_tools() {
     info "Installing base tools..."
+    # 必须在第一次 apt update 之前清掉坏源，否则残留的 mariadb.list 会让 update 直接 die
+    clean_stale_repo_files
     if [ "$OS_FAMILY" = "rhel" ]; then
         pkg_install curl wget unzip ca-certificates openssl logrotate || die "Failed to install base tools."
         # EPEL：先试发行版自带 epel-release，失败再用 Fedora 官方 RPM（覆盖 RHEL/CentOS/各种衍生版）
@@ -353,6 +380,7 @@ install_php() {
             "${pfx}-sodium" \
             "${pfx}-zip" \
             "${pfx}-json" \
+            "${pfx}-fileinfo" \
             "${pfx}-pecl-redis" \
             "${pfx}-pecl-imagick" || true
     else
@@ -372,6 +400,7 @@ install_php() {
             "php${v}-intl" \
             "php${v}-zip" \
             "php${v}-common" \
+            "php${v}-fileinfo" \
             "php${v}-redis" \
             "php${v}-imagick" || true
     fi
@@ -457,7 +486,10 @@ ServerSignature Off
 </IfModule>
 EOF
 
-    [ "$OS_FAMILY" = "debian" ] && a2enconf lamp-security >/dev/null
+    if [ "$OS_FAMILY" = "debian" ]; then
+        a2enconf lamp-security >/dev/null
+    fi
+    return 0
 }
 
 generate_ssl_cert() {
@@ -557,14 +589,8 @@ install_mariadb_repo() {
     local ver=$1
     info "Configuring MariaDB ${ver} repository..."
 
-    # 清理历史残留源配置，避免旧版本号（如上次选的 11.4）仍被 apt/dnf 使用
-    if [ "$OS_FAMILY" = "rhel" ]; then
-        rm -f /etc/yum.repos.d/MariaDB.repo /etc/yum.repos.d/mariadb.repo
-    else
-        rm -f /etc/apt/sources.list.d/mariadb*.list \
-              /etc/apt/sources.list.d/mariadb*.sources \
-              /etc/apt/sources.list.d/MariaDB*.list 2>/dev/null || true
-    fi
+    # 再清一次残留源配置（install_base_tools 已清过；此处保证独立调用时也正确）
+    clean_stale_repo_files
 
     if [ "$OS_FAMILY" = "rhel" ]; then
         cat > /etc/yum.repos.d/MariaDB.repo << EOF
@@ -618,9 +644,30 @@ EOF
     fi
 }
 
+# MariaDB-server 硬依赖 galera-4，galera-4 依赖 libboost_program_options。
+# 该库在 RHEL 系的 CRB/PowerTools/devel 开发者源中，多数衍生版（如 OpenCloudOS）默认未启用。
+# 只在这类源里找这一只包，不影响 PHP/MariaDB 的选源，也不永久启用开发者源。
+ensure_boost_program_options() {
+    rpm -q boost-program-options >/dev/null 2>&1 && return 0
+    info "Installing boost-program-options (needed by galera-4)..."
+    pkg_install boost-program-options && return 0
+
+    # 按发行版常见命名逐个试；--enablerepo 仅本次事务生效，不写入配置
+    local r
+    for r in crb powertools devel CRB PowerTools Devel; do
+        if pkg_install "--enablerepo=${r}" boost-program-options; then
+            return 0
+        fi
+    done
+
+    die "boost-program-options (needed by galera-4 / MariaDB-server) is not available. \
+Enable your distro's devel/CRB/PowerTools repository and retry."
+}
+
 install_mariadb() {
     info "Installing MariaDB server..."
     if [ "$OS_FAMILY" = "rhel" ]; then
+        ensure_boost_program_options
         run yum install -y --enablerepo=mariadb mariadb mariadb-server
         command -v mysqld >/dev/null 2>&1 || die "mysqld not found after installation."
     else
@@ -854,9 +901,10 @@ open_firewall() {
 detect_current_php() {
     local v
     if [ "$OS_FAMILY" = "rhel" ]; then
+        # 服务名形如 php85-php-fpm（85 = 8.5），主版本可能是多位数，只把最后一位当小版本
         v=$(systemctl list-units --type=service --state=running --no-legend 2>/dev/null \
             | grep -oE 'php[0-9]+-php-fpm' | head -n1 | grep -oE '[0-9]+')
-        [ -n "$v" ] && echo "${v:0:1}.${v:1}"
+        [ -n "$v" ] && echo "${v:0:$(( ${#v} - 1 ))}.${v: -1}"
     else
         v=$(systemctl list-units --type=service --state=running --no-legend 2>/dev/null \
             | grep -oE 'php[0-9]+\.[0-9]+-fpm' | head -n1 | sed -E 's/php([0-9.]+)-fpm/\1/')
@@ -865,6 +913,10 @@ detect_current_php() {
 }
 
 add_domain() {
+    # 用 Web 服务是否存在判断是否已装 LAMP（PUBLIC_DIR 会被 preflight 创建，不能作依据）
+    systemctl list-unit-files "${WEB_SERVICE}.service" >/dev/null 2>&1 \
+        || die "LAMP environment not found (${WEB_SERVICE} is not installed). Please install first."
+
     local dom
     while :; do
         read -r -p "Please input your new domain: " dom
@@ -878,8 +930,6 @@ add_domain() {
             break
         fi
     done
-
-    [ -d "$PUBLIC_DIR" ] || die "LAMP environment not found (missing ${PUBLIC_DIR}). Please install first."
 
     local php_ver
     php_ver=$(detect_current_php)
@@ -1006,6 +1056,9 @@ collect_install_input() {
             echo "Password cannot be empty, please try again."
         elif [[ "$dbpasswd" == *"'"* ]]; then
             echo "Password cannot contain single quotes, please try again."
+        elif [[ "$dbpasswd" == *"\\"* ]]; then
+            # MySQL 字符串中反斜杠是转义符，会改变密码语义
+            echo "Password cannot contain backslashes, please try again."
         else
             read -r -s -p "Confirm MariaDB root password: " dbpasswd2
             echo
@@ -1016,7 +1069,13 @@ collect_install_input() {
 
     echo
     read -r -t 20 -p "Do you want to install phpMyAdmin [yes/no, default: no]: " phpmyadmin
+    # 统一转小写再判断，接受 Yes/YES/y 等输入
     phpmyadmin=${phpmyadmin:-no}
+    phpmyadmin=$(printf '%s' "$phpmyadmin" | tr '[:upper:]' '[:lower:]')
+    case "$phpmyadmin" in
+        yes|y) phpmyadmin="yes" ;;
+        *)     phpmyadmin="no" ;;
+    esac
 }
 
 # -----------------------------------------------------------------------
@@ -1040,13 +1099,17 @@ do_install() {
     install_base_tools
     install_php_repo
     install_php "$php_version"
+    info "PHP done. Installing Apache..."
     install_apache
+    info "Apache done. Configuring MariaDB repository..."
     install_mariadb_repo "$mariadb_version"
+    info "Installing MariaDB server (this may take a while)..."
     install_mariadb
 
     configure_php "$php_version"
     configure_apache_security
     generate_ssl_cert
+    info "Migrating MariaDB datadir and securing database..."
     migrate_mariadb_datadir
     secure_mariadb "$dbpasswd"
 
@@ -1057,6 +1120,7 @@ do_install() {
         install_phpmyadmin "$domain"
     fi
 
+    info "Configuring firewall and starting services..."
     open_firewall
 
     run systemctl enable "$WEB_SERVICE" mariadb
