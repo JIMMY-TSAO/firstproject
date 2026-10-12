@@ -3,8 +3,8 @@
 #  LAMP (Apache + MariaDB + PHP) Installer & Virtual Host Manager
 #
 #  Supported OS (tested):
-#    RHEL / Rocky Linux / AlmaLinux / CentOS Stream 8+
-#    Debian 11+ / Ubuntu 20.04+
+#    RHEL / Rocky Linux / AlmaLinux / CentOS Stream 9+
+#    Debian 12+ / Ubuntu 22.04+
 #
 #  Other distributions are NOT supported. Derivatives often lack packages or
 #  provide-names this script depends on (epel-release, redhat-release,
