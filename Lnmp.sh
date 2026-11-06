@@ -520,11 +520,13 @@ disable_nginx_default_site() {
 }
 
 configure_nginx_security() {
-    # add_header / server_tokens 写在 http 上下文，被所有 server 块继承
-    # （vhost 自身不再定义 add_header，否则会覆盖这里的继承链）
+    # 安全头写在 http 上下文，被所有 server 块继承
+    # （vhost 自身不定义 add_header，否则会截断这里的继承链）
+    # 注意：server_tokens 不放这里——部分发行版镜像的 nginx.conf 自带生效的
+    # http 级 server_tokens，同层再写一遍会报 "directive is duplicate" 让
+    # nginx -t 失败；server_tokens 改放到各 vhost 的 server 块内（server 级
+    # 与 http 级同名指令是覆盖关系，不会冲突）。
     cat > /etc/nginx/conf.d/00-security.conf << 'EOF'
-server_tokens off;
-
 add_header X-Frame-Options "SAMEORIGIN" always;
 add_header X-Content-Type-Options "nosniff" always;
 add_header Referrer-Policy "strict-origin-when-cross-origin" always;
@@ -587,6 +589,7 @@ server {
     error_log  ${PUBLIC_DIR}/${dom}/logs/error.log;
 
     # 与 php.ini 的 upload_max_filesize 对齐
+    server_tokens off;
     client_max_body_size 16m;
 
     # 禁止访问隐藏文件（.git/.env/.htaccess 等）
@@ -619,6 +622,7 @@ server {
     access_log ${PUBLIC_DIR}/${dom}/logs/access.log;
     error_log  ${PUBLIC_DIR}/${dom}/logs/error.log;
 
+    server_tokens off;
     client_max_body_size 16m;
 
     ssl_certificate     ${SSL_CRT};
