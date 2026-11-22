@@ -592,9 +592,6 @@ server {
     server_tokens off;
     client_max_body_size 16m;
 
-    # 禁止访问隐藏文件（.git/.env/.htaccess 等）
-    location ~ /\. { deny all; }
-
     # 伪静态：通用规则（覆盖 WordPress / Laravel 等常见程序的前台控制器模式）
     location / {
         try_files \$uri \$uri/ /index.php?\$args;
@@ -628,8 +625,6 @@ server {
     ssl_certificate     ${SSL_CRT};
     ssl_certificate_key ${SSL_KEY};
     ssl_protocols       TLSv1.2 TLSv1.3;
-
-    location ~ /\. { deny all; }
 
     location / {
         try_files \$uri \$uri/ /index.php?\$args;
