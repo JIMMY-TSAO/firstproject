@@ -25,8 +25,8 @@ readonly MIN_DATA_KB=512000          # /Data 可用空间下限 500MB
 readonly PMA_VERSION="5.2.1"
 
 # PHP / MariaDB 可选版本（与菜单一一对应）
-readonly PHP_VERSIONS="7.4 8.1 8.3 8.5"
-readonly MARIADB_VERSIONS="10.11 11.4 12.3 13.0"
+readonly PHP_VERSIONS="8.4 8.5 8.6"
+readonly MARIADB_VERSIONS="10.11 11.4 12.3"
 
 # -----------------------------------------------------------------------
 # 输出与错误处理
@@ -61,7 +61,7 @@ detect_os() {
     os_kernel=$(uname -sr)
 
     # Fedora 走自己的源体系，不在本脚本支持范围
-    [ "$os_id" = "fedora" ] && die "Fedora is not supported (need EL8+ compatible repositories)."
+    [ "$os_id" = "fedora" ] && die "Fedora is not supported (need EL9+ compatible repositories)."
 
     # ---- 发行版归类：显式 ID 优先，其余按 ID_LIKE 兜底 ----
     case "$os_id" in
@@ -82,10 +82,10 @@ detect_os() {
             ;;
     esac
 
-    # ---- 版本下限：RHEL 系 8+（已不支持 EL7），Debian 11+ / Ubuntu 20.04+ ----
+    # ---- 版本下限（与文件头注释一致）：RHEL 系 9+（已不支持 EL7/8），Debian 12+ / Ubuntu 22.04+ ----
     if [ "$OS_FAMILY" = "rhel" ]; then
-        [ "$os_major" -ge 8 ] 2>/dev/null \
-            || die "RHEL family version ${os_version_id} is too old. Need 8 or newer."
+        [ "$os_major" -ge 9 ] 2>/dev/null \
+            || die "RHEL family version ${os_version_id} is too old. Need 9 or newer."
         if [ -e /etc/redhat-release ]; then
             os_release=$(cat /etc/redhat-release)
         else
@@ -94,13 +94,13 @@ detect_os() {
     else
         case "$os_id" in
             debian)
-                [ "$os_major" -ge 11 ] 2>/dev/null \
-                    || die "Debian ${os_version_id} is too old. Need Debian 11 or newer."
+                [ "$os_major" -ge 12 ] 2>/dev/null \
+                    || die "Debian ${os_version_id} is too old. Need Debian 12 or newer."
                 ;;
             ubuntu)
                 # 20.04 = 20, 22.04 = 22 ...
-                [ "$os_major" -ge 20 ] 2>/dev/null \
-                    || die "Ubuntu ${os_version_id} is too old. Need Ubuntu 20.04 or newer."
+                [ "$os_major" -ge 22 ] 2>/dev/null \
+                    || die "Ubuntu ${os_version_id} is too old. Need Ubuntu 22.04 or newer."
                 ;;
         esac
         [ -n "$os_codename" ] || die "Cannot detect Debian/Ubuntu codename (need VERSION_CODENAME)."
@@ -1008,7 +1008,7 @@ add_domain() {
 
     local php_ver
     php_ver=$(detect_current_php)
-    php_ver=${php_ver:-8.5}
+    php_ver=${php_ver:-8.6}
     info "Using PHP ${php_ver} for ${dom}"
 
     run mkdir -p "${PUBLIC_DIR}/${dom}/public_html" "${PUBLIC_DIR}/${dom}/logs"
@@ -1061,18 +1061,17 @@ choose_php_version() {
         i=$((i + 1))
         echo "${i}. PHP${v}"
     done
-    local total=$i default_idx=$i
-    local default_ver="${PHP_VERSIONS##* }"
+    local total=$i default_idx=3
+    local default_ver="8.6"
 
     while :; do
         echo
         read -r -t 25 -p "Please choose the PHP version [${default_idx} for PHP${default_ver}]: " v
         v=${v:-$default_idx}
         case "$v" in
-            1) php_version="7.4" ;;
-            2) php_version="8.1" ;;
-            3) php_version="8.3" ;;
-            4) php_version="8.5" ;;
+            1) php_version="8.4" ;;
+            2) php_version="8.5" ;;
+            3) php_version="8.6" ;;
             *)
                 echo "Your choice is not 1-${total}, will install PHP${default_ver}"
                 php_version=$default_ver
@@ -1100,7 +1099,6 @@ choose_mariadb_version() {
             1) mariadb_version="10.11" ;;
             2) mariadb_version="11.4" ;;
             3) mariadb_version="12.3" ;;
-            4) mariadb_version="13.0" ;;
             *)
                 echo "Your choice is not 1-${total}, will install MariaDB ${default_ver}"
                 mariadb_version=$default_ver
